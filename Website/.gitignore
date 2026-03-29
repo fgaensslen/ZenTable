@@ -1,0 +1,7 @@
+/.DS_Store
+.vscode
+node_modules
+files/*
+dist
+src/public/client.min.js
+.env

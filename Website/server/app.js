@@ -5,7 +5,7 @@ import http from "http";
 import bodyParser from "body-parser";
 import processupload from "./routes/process_upload";
 import trackmanager from "./routes/track_manager";
-import ledcontroller from "./routes/led_controller";
+//import ledcontroller from "./routes/led_controller";
 import playlistmanager from "./routes/playlist_manager";
 
 const app = express();
@@ -28,7 +28,7 @@ app.use(bodyParser.urlencoded({ extended: false, limit: '50MB' }));
 // Add subroutes
 app.use("/file-upload", processupload);
 app.use("/tracks", trackmanager);
-app.use("/led", ledcontroller);
+//app.use("/led", ledcontroller);
 app.use("/playlists", playlistmanager);
 
 app.listen(process.env.NODE_ENV == "production" ? process.env.PRODUCTION_PORT : process.env.PORT, () =>

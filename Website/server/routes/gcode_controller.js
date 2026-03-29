@@ -1,6 +1,7 @@
 require('dotenv').config();
 
-const SerialPort = require('serialport');
+const { SerialPort } = require('serialport');
+const { ReadlineParser } = require('@serialport/parser-readline');
 var fs = require('fs');
 const { exit, send } = require('process');
 const Process_Theta_Rho = require('./process_theta_rho');
@@ -19,11 +20,9 @@ var endPos = [Process_Theta_Rho.X_SIZE / 2, Process_Theta_Rho.Y_SIZE / 2] // Bal
 
 var cmdQueue = [];
 
-const port = new SerialPort(PORT, {
-    baudRate: 250000
-}).on("error", (e) => console.log(e));
-var portParser = new SerialPort.parsers.Readline();
-port.pipe(portParser);
+const port = new SerialPort({ path: PORT, baudRate: 115200 });
+port.on("error", (e) => console.log(e));
+var portParser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
 function sendNextCmd(justExecuteWithoutReadingPort = false, dat) {
     if (paused) return; // Don't do anything with the sand table if paused
@@ -348,11 +347,10 @@ setTimeout(() => {
     backwards = false;
     index = 0;
     file = [
+        "$X",
+        "$H",
         "G90",
-        "G28",
-        "M220 S100",
-        "M204 P4000 T4000",
-        "M205 J0.0001",
+        "G21",
         `G0 X${Process_Theta_Rho.X_SIZE / 2} Y${Process_Theta_Rho.Y_SIZE / 2}`, // center of table
     ];
     sendNextCmd(true); // Run start gcode

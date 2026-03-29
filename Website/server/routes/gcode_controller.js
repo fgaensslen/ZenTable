@@ -351,7 +351,6 @@ setTimeout(() => {
         "$H",
         "G90",
         "G21",
-        `G0 X${Process_Theta_Rho.X_SIZE / 2} Y${Process_Theta_Rho.Y_SIZE / 2}`, // center of table
     ];
     sendNextCmd(true); // Run start gcode
     console.log("GCode Controller Initialized");

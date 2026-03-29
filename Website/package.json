@@ -76,8 +76,8 @@
   },
   "scripts": {
     "server": "nodemon server/app.js -e js,jsx,html,scss --ignore 'playlists.json' --exec babel-node",
-    "react": "webpack",
-    "start": "rm -rf dist && export NODE_ENV=development && export NODE_OPTIONS=--openssl-legacy-provider && concurrently \"npm run react\" \"npm run server\"",
+    "react": "webpack --no-stats",
+    "start": "rm -rf dist && export NODE_ENV=development && export NODE_OPTIONS=\"--openssl-legacy-provider --no-deprecation\" && nodemon server/app.js -e js,jsx,html,scss --ignore 'playlists.json' --exec babel-node",
     "build": "babel server -d dist",
     "prod": "rm -rf dist && npm run build && export NODE_ENV=production && concurrently \"npm run react\" \"node dist/app.js\""
   }

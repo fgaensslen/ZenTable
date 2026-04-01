@@ -1,94 +1,87 @@
-require("dotenv").config();
-
-import express from 'express';
-import path from 'path';
-
-var cmd = require('node-cmd');
-cmd.runSync(path.resolve(path.join(__dirname, '../../flash-light-strip-controller.sh')));
-
-const SerialPort = require('serialport');
+import express from "express";
 const router = express.Router();
+import { SerialPort } from 'serialport';
 
-const PORT = process.env.LED_STRIP_ARDUINO_SERIAL_PORT;
-
-var mode = "0";
-
-const port = new SerialPort(PORT, {
+const port = new SerialPort({
+  path: '/dev/ttyAMA0',
   baudRate: 115200,
 });
-port.on("error", (e) => console.log(e));
 
-var cmd_interval = null;
-var cmd_res = null;
-port.on('data', function (data) {
-  data = data.toString();
-  console.log(`Received data from led strip controller: ${data}`);
-  if (cmd_interval != null && cmd_res != null && data.includes("ack")) {
+let cmd_interval = null;
+
+// Hilfsfunktion: Hex zu RGB wandeln
+function hexToRgb(hex) {
+  // Entferne %23 oder # am Anfang
+  const cleanHex = hex.replace('%23', '').replace('#', '');
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(cleanHex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null;
+}
+
+function sendCommand(cmd, res) {
+  // WICHTIG: Alten Intervall sofort löschen, um Platz für neuen Befehl zu machen
+  if (cmd_interval) {
     clearInterval(cmd_interval);
     cmd_interval = null;
-    cmd_res.sendStatus(200);
-    cmd_res = null;
   }
-})
+  
+  const fullCmd = cmd + "\n";
+  console.log(`Sende an Arduino: ${cmd}`);
+  port.write(fullCmd);
+  
+  // Wir antworten dem Browser SOFORT, damit die Seite nicht hängt
+  if (res) res.status(200).send({ status: "sent", command: cmd });
 
-router.post("/set", function (req, res) {
-  var cmd = Buffer.from(decodeURIComponent(req.body.cmd));
-  switch (cmd[0]) {
-    case '#'.charCodeAt(0):
-      // Setting a new solid color
-      mode = cmd.toString();
-      cmd = Buffer.from([
-        '#'.charCodeAt(0),
-        parseInt(cmd.slice(1, 3).toString(), 16),
-        parseInt(cmd.slice(3, 5).toString(), 16),
-        parseInt(cmd.slice(5, 7).toString(), 16),
-      ]);
-      break;
-    case '!'.charCodeAt(0):
-      // Setting new brightness, no need to change mode
-      cmd = Buffer.from([
-        '!'.charCodeAt(0),
-        parseInt(cmd.slice(1, 3).toString(), 16),
-      ]);
-      break;
-    case '@'.charCodeAt(0):
-      // Setting new speed, no need to change mode
-      cmd = Buffer.from([
-        '@'.charCodeAt(0),
-        parseInt(cmd.slice(1, 3).toString(), 16),
-      ]);
-      break;
-    default:
-      // Setting mode to a predefined pattern
-      mode = "" + cmd[0];
-      cmd = cmd.slice(0, 1);
-      break;
-  }
+  // Optional: Einmalige Wiederholung nach 100ms, falls der erste Versuch im "Undervoltage" unterging
+  setTimeout(() => {
+    port.write(fullCmd);
+  }, 100);
+}
 
-  // Add start and end characters
-  cmd = Buffer.concat([Buffer.from("["), cmd, Buffer.from("]\n")])
-  port.flush(() => {
-    // Send same command several times because FastLED messes with Arduino Serial (so some packets are lost)
-    cmd_res = res;
-    var send_cnt = 0;
-    cmd_interval = setInterval(() => {
-      port.write(cmd);
-      port.drain(() => {
-        console.log("Sent cmd to led strip: [" + Array.from(cmd.values()) + "]");
-      });
-
-      if (++send_cnt === 50) {
-        clearInterval(cmd_interval);
-        cmd_interval = null;
-        if(cmd_res) cmd_res.sendStatus(200);
-        cmd_res = null;
-    }
-    }, 5);
-  });
+// Feedback vom Arduino (nur zum Loggen)
+port.on('data', (data) => {
+  console.log(`Arduino-Antwort: ${data.toString().trim()}`);
 });
 
-router.get("/get", function (req, res) {
-  res.send(mode);
+router.post("*", (req, res) => {
+  const data = req.body;
+  console.log("Web-Befehl erhalten:", data);
+
+  if (!data.cmd) return res.status(400).send("Kein cmd vorhanden");
+
+  // 1. FARBRAD (Erkennt %23 als Ersatz für #)
+  if (data.cmd.startsWith('%23') || data.cmd.startsWith('#')) {
+    const rgb = hexToRgb(data.cmd);
+    if (rgb) {
+      sendCommand(`c:${rgb.r},${rgb.g},${rgb.b}`, res);
+    } else {
+      res.status(400).send("Ungültiger Hex-Code");
+    }
+    return;
+  }
+
+  // 2. MODI (%01, %02, etc.)
+  if (data.cmd.startsWith('%')) {
+    const rawId = data.cmd.replace('%', '');
+    
+    // Mapping-Tabelle
+    const mapping = {
+      "01": "s",    // Off
+      "02": "m:2",  // Rainbow
+      "03": "m:2",  // Christmas -> Rainbow
+      "04": "m:3",  // Color Pulse -> Breathe
+      "05": "m:4"   // Ambiance -> Running
+    };
+
+    const targetCmd = mapping[rawId] || `m:${parseInt(rawId, 10)}`;
+    sendCommand(targetCmd, res);
+    return;
+  }
+
+  res.status(200).send("Daten empfangen");
 });
 
 export default router;

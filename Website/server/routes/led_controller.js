@@ -52,36 +52,47 @@ router.post("*", (req, res) => {
 
   if (!data.cmd) return res.status(400).send("Kein cmd vorhanden");
 
-  // 1. FARBRAD (Erkennt %23 als Ersatz für #)
-  if (data.cmd.startsWith('%23') || data.cmd.startsWith('#')) {
-    const rgb = hexToRgb(data.cmd);
-    if (rgb) {
-      sendCommand(`c:${rgb.r},${rgb.g},${rgb.b}`, res);
-    } else {
-      res.status(400).send("Ungültiger Hex-Code");
+  // --- 1. GESCHWINDIGKEIT (Muss ZUERST kommen!) ---
+  if (data.cmd.startsWith('%40')) {
+    const hexValue = data.cmd.replace('%40', '');
+    const speed = parseInt(hexValue, 16);
+
+    if (!isNaN(speed)) {
+      console.log(`Geschwindigkeit erkannt: ${speed}`);
+      sendCommand(`v:${speed}`, res); // Sendet v:X an den Arduino
     }
     return;
   }
 
-  // 2. MODI (%01, %02, etc.)
+  // --- 2. HELLIGKEIT (!9e) ---
+  if (data.cmd.startsWith('!')) {
+    const hexValue = data.cmd.replace('!', '');
+    const bright = parseInt(hexValue, 16);
+    if (!isNaN(bright)) {
+      sendCommand(`b:${bright}`, res);
+    }
+    return;
+  }
+
+  // --- 3. FARBRAD (%23ff...) ---
+  if (data.cmd.startsWith('%23') || data.cmd.startsWith('#')) {
+    const rgb = hexToRgb(data.cmd);
+    if (rgb) sendCommand(`c:${rgb.r},${rgb.g},${rgb.b}`, res);
+    return;
+  }
+
+  // --- 4. MODI (Alle anderen % Befehle) ---
   if (data.cmd.startsWith('%')) {
     const rawId = data.cmd.replace('%', '');
-    
-    // Mapping-Tabelle
     const mapping = {
-      "01": "s",    // Off
-      "02": "m:2",  // Rainbow
-      "03": "m:2",  // Christmas -> Rainbow
-      "04": "m:3",  // Color Pulse -> Breathe
-      "05": "m:4"   // Ambiance -> Running
+      "01": "s", "02": "m:2", "03": "m:2", "04": "m:3", "05": "m:4"
     };
-
     const targetCmd = mapping[rawId] || `m:${parseInt(rawId, 10)}`;
     sendCommand(targetCmd, res);
     return;
   }
 
-  res.status(200).send("Daten empfangen");
+  res.status(200).send("Verarbeitet");
 });
 
 export default router;
